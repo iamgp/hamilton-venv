@@ -26,8 +26,8 @@ func createEnv(envName string) {
 // createCmd represents the create command
 var createCmd = &cobra.Command{
 	Use:   "create",
-	Short: "A brief description of your command",
-	Long: ``,
+	Short: "Creates a new environment.",
+	Long:  "This command allows you to create a new environment. You can specify the name of the environment during creation.",
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
 			cmd.Help()

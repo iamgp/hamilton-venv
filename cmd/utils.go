@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -63,12 +62,6 @@ func copy(src, dst string) (int64, error) {
 	nBytes, err := io.Copy(destination, source)
 
 	log.SetTimeFormat(time.Kitchen)
-	log.Info("File(s) copied.", "File",
-	 strings.Join([]string{
-			"source: " + src,
-			"destination: " + dst,
-			"size: " + fmt.Sprint(nBytes),
-		}, "\n"),
-	)
+	log.Info("Copied file: " + dst)
 	return nBytes, err
 }

@@ -31,8 +31,8 @@ func listEnvs() {
 
 var listCmd = &cobra.Command{
 	Use:   "list",
-	Short: "A brief description of your command",
-	Long: ``,
+	Short: "Lists all available environments.",
+	Long:  "This command allows you to list all available environments. The environments are displayed in the order they were created.",
 	Run: func(cmd *cobra.Command, args []string) {
 		listEnvs()
 	},

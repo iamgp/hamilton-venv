@@ -53,19 +53,21 @@ func extractFilePaths(filePath string) ([]string, error) {
 	defer file.Close()
 
 	var paths []string
-	scanner := bufio.NewScanner(file)
+	reader := bufio.NewReader(file)
 	includeRegex := regexp.MustCompile(`#include\s+"([^"]+)"`)
 
-	for scanner.Scan() {
-		line := scanner.Text()
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil && err != io.EOF {
+			return nil, err
+		}
 		matches := includeRegex.FindStringSubmatch(line)
 		if len(matches) > 1 {
 			paths = append(paths, matches[1])
 		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, err
+		if err == io.EOF {
+			break
+		}
 	}
 
 	return paths, nil
@@ -90,7 +92,13 @@ func resolvePath(baseDir, includePath string) (string, string) {
 		return libraryPath, "library"
 	}
 
-	// If the file is not found in either location, return the original path
+	// Check if the file exists in the "C:\\Program Files (x86)\\HAMILTON\\Methods" directory
+	methodsPath := filepath.Join("C:\\Program Files (x86)\\HAMILTON\\Methods", includePath)
+	if _, err := os.Stat(methodsPath); err == nil {
+		return methodsPath, "methods"
+	}
+
+	// If the file is not found in any location, return the original path
 	return includePath, "unknown"
 }
 
@@ -109,7 +117,134 @@ func findFilesWithExtensions(baseDir, baseName string) ([]string, error) {
 	return files, err
 }
 
-// createCmd represents the create command
+// Function to process a file and its dependencies recursively
+func processFile(filePath, targetPath string, processedFiles map[string]bool, fileSources map[string]string) error {
+	if processedFiles[filePath] {
+		return nil
+	}
+	processedFiles[filePath] = true
+
+	// Extract file paths from the source file
+	paths, err := extractFilePaths(filePath)
+	if err != nil {
+		return fmt.Errorf("error extracting file paths: %w", err)
+	}
+
+	// Get the directory of the source file
+	sourceDir := filepath.Dir(filePath)
+
+	// Copy each file to the target directory
+	for _, path := range paths {
+		// Resolve the full path of the included file and track its source
+		fullPath, source := resolvePath(sourceDir, path)
+		fileSources[fullPath] = source
+
+		// Find files with the same base name but different extensions
+		baseName := strings.TrimSuffix(filepath.Base(fullPath), filepath.Ext(fullPath))
+		sameDirFiles, err := findFilesWithExtensions(sourceDir, baseName)
+		if err != nil {
+			return fmt.Errorf("error finding files with extensions: %w", err)
+		}
+		libraryFiles, err := findFilesWithExtensions("C:\\Program Files (x86)\\HAMILTON\\Library", baseName)
+		if err != nil {
+			return fmt.Errorf("error finding files with extensions: %w", err)
+		}
+		methodsFiles, err := findFilesWithExtensions("C:\\Program Files (x86)\\HAMILTON\\Methods", baseName)
+		if err != nil {
+			return fmt.Errorf("error finding files with extensions: %w", err)
+		}
+
+		// Copy files from the same directory
+		for _, file := range sameDirFiles {
+			if processedFiles[file] {
+				continue
+			}
+			processedFiles[file] = true
+			fileSources[file] = "sameDir"
+
+			relativePath, err := filepath.Rel(sourceDir, file)
+			if err != nil {
+				return fmt.Errorf("error getting relative path: %w", err)
+			}
+			targetFilePath := filepath.Join(targetPath, "Methods", relativePath)
+			err = os.MkdirAll(filepath.Dir(targetFilePath), 0755)
+			if err != nil {
+				return fmt.Errorf("error creating target directory: %w", err)
+			}
+			err = copyFile(file, targetFilePath)
+			if err != nil {
+				return fmt.Errorf("error copying file: %w", err)
+			}
+			log.Info("Copied file", "source", file, "target", targetFilePath)
+			// Process the copied file recursively
+			err = processFile(file, targetPath, processedFiles, fileSources)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Copy files from the library directory
+		for _, file := range libraryFiles {
+			if processedFiles[file] {
+				continue
+			}
+			processedFiles[file] = true
+			fileSources[file] = "library"
+
+			relativePath, err := filepath.Rel("C:\\Program Files (x86)\\HAMILTON\\Library", file)
+			if err != nil {
+				return fmt.Errorf("error getting relative path: %w", err)
+			}
+			targetFilePath := filepath.Join(targetPath, "Library", relativePath)
+			err = os.MkdirAll(filepath.Dir(targetFilePath), 0755)
+			if err != nil {
+				return fmt.Errorf("error creating target directory: %w", err)
+			}
+			err = copyFile(file, targetFilePath)
+			if err != nil {
+				return fmt.Errorf("error copying file: %w", err)
+			}
+			log.Info("Copied file", "source", file, "target", targetFilePath)
+			// Process the copied file recursively
+			err = processFile(file, targetPath, processedFiles, fileSources)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Copy files from the methods directory
+		for _, file := range methodsFiles {
+			if processedFiles[file] {
+				continue
+			}
+			processedFiles[file] = true
+			fileSources[file] = "methods"
+
+			relativePath, err := filepath.Rel("C:\\Program Files (x86)\\HAMILTON\\Methods", file)
+			if err != nil {
+				return fmt.Errorf("error getting relative path: %w", err)
+			}
+			targetFilePath := filepath.Join(targetPath, "Methods", relativePath)
+			err = os.MkdirAll(filepath.Dir(targetFilePath), 0755)
+			if err != nil {
+				return fmt.Errorf("error creating target directory: %w", err)
+			}
+			err = copyFile(file, targetFilePath)
+			if err != nil {
+				return fmt.Errorf("error copying file: %w", err)
+			}
+			log.Info("Copied file", "source", file, "target", targetFilePath)
+			// Process the copied file recursively
+			err = processFile(file, targetPath, processedFiles, fileSources)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 var createCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Creates a new environment.",
@@ -124,69 +259,15 @@ var createCmd = &cobra.Command{
 
 		sourceFile := os.Args[3]
 
-		// Extract file paths from the source file
-		paths, err := extractFilePaths(sourceFile)
-		if err != nil {
-			log.Info("Error extracting file paths:", err)
-			return
-		}
-
-		// Get the directory of the source file
-		sourceDir := filepath.Dir(sourceFile)
-
+		// Map to track processed files
+		processedFiles := make(map[string]bool)
 		// Map to track the source of each file
 		fileSources := make(map[string]string)
 
-		// Copy each file to the target directory
-		for _, path := range paths {
-			// Resolve the full path of the included file and track its source
-			fullPath, source := resolvePath(sourceDir, path)
-			fileSources[fullPath] = source
-
-			// Find files with the same base name but different extensions
-			baseName := strings.TrimSuffix(filepath.Base(fullPath), filepath.Ext(fullPath))
-			sameDirFiles, err := findFilesWithExtensions(sourceDir, baseName)
-			if err != nil {
-				log.Info("Error finding files with extensions:", err)
-				return
-			}
-			libraryFiles, err := findFilesWithExtensions("C:\\Program Files (x86)\\HAMILTON\\Library", baseName)
-			if err != nil {
-				log.Info("Error finding files with extensions:", err)
-				return
-			}
-
-			// Copy files from the same directory
-			for _, file := range sameDirFiles {
-				targetFilePath := filepath.Join(targetPath, filepath.Base(file))
-				err := os.MkdirAll(filepath.Dir(targetFilePath), 0755)
-				if err != nil {
-					log.Error("Error creating target directory:", "error", err)
-					return
-				}
-				err = copyFile(file, targetFilePath)
-				if err != nil {
-					log.Info("Error copying file:", err)
-					return
-				}
-				log.Info("Copied file", "source", file, "target", targetFilePath)
-			}
-
-			// Copy files from the library directory
-			for _, file := range libraryFiles {
-				targetFilePath := filepath.Join(targetPath, filepath.Base(file))
-				err := os.MkdirAll(filepath.Dir(targetFilePath), 0755)
-				if err != nil {
-					log.Error("Error creating target directory:", "error", err)
-					return
-				}
-				err = copyFile(file, targetFilePath)
-				if err != nil {
-					log.Info("Error copying file:", err)
-					return
-				}
-				log.Info("Copied file", "source", file, "target", targetFilePath)
-			}
+		// Process the source file and its dependencies recursively
+		err := processFile(sourceFile, targetPath, processedFiles, fileSources)
+		if err != nil {
+			log.Fatal("Error processing files:", err)
 		}
 
 		// Save the file sources to a metadata file
@@ -207,6 +288,7 @@ var createCmd = &cobra.Command{
 		}
 
 		log.Info("File sources saved to", metadataFile)
+		log.Info("Environment created successfully with all dependencies.")
 	},
 }
 

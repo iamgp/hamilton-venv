@@ -1,4 +1,4 @@
-package cmd
+package utils
 
 import (
 	"fmt"
@@ -10,25 +10,25 @@ import (
 	"github.com/charmbracelet/log"
 )
 
-func hvenvRootDir() (string, bool) {
+func HvenvRootDir() (string, bool) {
 	homeDir, err := os.UserHomeDir()
-	check(err)
+	Check(err)
 	envPath := filepath.Join(homeDir, ".hvenv")
 
 	_, err = os.Stat(envPath)
 	return envPath, !os.IsNotExist(err)
 }
 
-func hvenvDir(envName string) (string, bool) {
+func HvenvDir(envName string) (string, bool) {
 	homeDir, err := os.UserHomeDir()
-	check(err)
+	Check(err)
 	envPath := filepath.Join(homeDir, ".hvenv", envName)
 
 	_, err = os.Stat(envPath)
 	return envPath, !os.IsNotExist(err)
 }
 
-func check(err error, messages ...string) {
+func Check(err error, messages ...string) {
 	if err != nil {
 		for _, message := range messages {
 			log.Error(message)
@@ -38,7 +38,7 @@ func check(err error, messages ...string) {
 	}
 }
 
-func copy(src, dst string) (int64, error) {
+func Copy(src, dst string) (int64, error) {
 	sourceFileStat, err := os.Stat(src)
 	if err != nil {
 		return 0, err
@@ -64,4 +64,9 @@ func copy(src, dst string) (int64, error) {
 	log.SetTimeFormat(time.Kitchen)
 	log.Info("Copied file: " + dst)
 	return nBytes, err
+}
+
+// GetCurrentTimestamp returns the current time formatted as RFC3339.
+func GetCurrentTimestamp() string {
+	return time.Now().Format(time.RFC3339)
 }

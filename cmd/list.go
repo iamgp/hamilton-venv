@@ -4,6 +4,7 @@ Copyright © 2024 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"hvenv/pkg/utils"
 	"os"
 
 	"github.com/charmbracelet/log"
@@ -11,7 +12,7 @@ import (
 )
 
 func listEnvs() {
-	rootDir, exists := hvenvRootDir()
+	rootDir, exists := utils.HvenvDir("")
 	if !exists {
 		log.Error(".hvenv directory does not exist. Please create an environment first.")
 	}

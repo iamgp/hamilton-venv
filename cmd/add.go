@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"hvenv/pkg/utils"
 )
 
 // addFilesToEnv adds the specified files to the environment with the given name.
@@ -19,20 +21,20 @@ import (
 //
 // Returns: None.
 func addFilesToEnv(envName string, files []string) {
-	envPath, _ := hvenvDir(envName)
+	envPath, _ := utils.HvenvDir(envName)
 
 	for _, file := range files {
 		file = strings.TrimSpace(file)
 
 		absPath, err := filepath.Abs(file)
 		destPath := filepath.Join(envPath, file)
-		check(err)
+		utils.Check(err)
 
 		err = os.MkdirAll(filepath.Dir(destPath), 0755)
-		check(err)
+		utils.Check(err)
 
-		_, err = copy(absPath, destPath)
-		check(err)
+		_, err = utils.Copy(absPath, destPath)
+		utils.Check(err)
 	}
 }
 
